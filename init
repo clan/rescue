@@ -1,0 +1,181 @@
+#!/bin/sh
+
+BOLD="\033[1m"
+GOOD="\033[32;1m"
+BAD="\033[31;1m"
+WARN="\033[33;1m"
+NORMAL="\033[0m"
+
+INIT_OPTS=""
+NEW_ROOT="/newroot"
+REAL_INIT="/sbin/init"
+CONSOLE="/dev/console"
+
+SCANDELAY='1'
+
+udevd_bin="/sbin/udevd"
+
+good_msg()
+{
+    msg=$1
+    msg="${msg:-...}"
+
+    echo -e "${GOOD}>>${NORMAL} ${msg} ${NORMAL}"
+}
+
+bad_msg()
+{
+    msg=$1
+    msg="${msg:-...}"
+
+    echo -e "${BAD}!!${NORMAL} ${msg} ${NORMAL}"
+}
+
+runshell()
+{
+    if [ -n "$1" ] && [ -x "$1" ] ; then
+        exec "$1"
+    else
+        exec /bin/sh
+    fi
+
+    exit 1
+}
+
+panic()
+{
+    bad_msg "$@"
+    bad_msg "Running a mini shell (cannot complete the boot process)"
+    sleep 2
+    runshell
+}
+
+udev_start()
+{
+    good_msg "Activating udev ..."
+
+    [ -e /etc/udev/udev.conf ] && source /etc/udev/udev.conf
+
+    tmpfs_size="10M"
+    mount -t devtmpfs -o size=$tmpfs_size,mode=0755 udev /dev
+
+    [ -e /dev/console ] || mknod -m 0600 /dev/console c 5 1
+    [ -e /dev/null ] || mknod /dev/null c 1 3
+
+    # process module dependencies
+    /sbin/depmod -a
+
+    # run udevd and let it process uevents
+    echo > /sys/kernel/uevent_helper
+    mkdir -p /dev/.udev/db/
+    ${udevd_bin} --daemon --resolve-names=never
+    mkdir -p /dev/.udev/queue/ /dev/.udev/rules.d/
+    udevadm trigger
+    udevadm settle || true
+
+    # if the scandelay parameter has been set, we wait a bit for devices
+    sleep 3 # sleep 3 seconds anyway: most USB devices just need it to initialize
+    [ -n "${SCANDELAY}" ] && good_msg "Waiting ${SCANDELAY} seconds ..." && sleep ${SCANDELAY}
+}
+
+udev_stop()
+{
+    good_msg "Try stop udev ..."
+
+    # Stop udevd, we'll miss a few events while we run init, but we catch up
+    for proc in /proc/[0-9]* ; do
+        [ -x $proc/exe ] || continue
+        [ "$(readlink $proc/exe)" != ${udevd_bin} ] || kill ${proc#/proc/}
+    done
+}
+
+rootfs_init()
+{
+    if [ -z "${REAL_ROOT}" ] ; then
+        REAL_ROOT="${FAKE_ROOT}" 
+    fi
+
+    real_device=$(findfs ${REAL_ROOT})
+    if [ ! -n "${real_device}" ] ; then
+    panic "Can't find root device ${REAL_ROOT}"
+    fi
+
+    good_msg "Detected root: ${real_device}"
+    fstype=$(blkid ${real_device} | sed -n 's/.*TYPE=\"\([^\"]*\)\".*/\1/p')
+    if [ -z "${fstype}" ] ; then
+        panic "Unable to detect the filesystem type"
+    fi
+
+    good_msg "Mounting ${real_device} as root w/ fstype ${fstype} ..."
+    mount -t "${fstype}" -o ro "${real_device}" "${NEW_ROOT}" && return 0
+
+    bad_msg "Cannot mount ${real_device}, trying with -t auto"
+    mount -t "auto" "${real_device}" "${NEW_ROOT}" && return 0
+
+    panic "Cannot mount ${real_device} with -t auto, giving up"
+}
+
+move_mounts_to_chroot()
+{
+    for fs in /run /dev /sys /proc; do
+        if grep -qs "$fs" /proc/mounts; then
+        local chroot_dir="${NEW_ROOT}${fs}"
+        [ -d "${chroot_dir}" ] || mkdir -p "${chroot_dir}"
+        if ! mount --move $fs "${chroot_dir}" ; then
+            umount $fs || bad_msg "Failed to move and umount $fs!"
+        fi
+    fi
+    done
+}
+
+# Clean input/output
+exec >${CONSOLE} <${CONSOLE} 2>&1
+
+if [ "$$" != "1" ]; then
+    echo "$0 has to be run as the init process as the one"
+    echo "with a PID of 1. Try adding init=$0 to the"
+    echo "kernel command line or running \"exec $0\"."
+    exit 1
+fi
+
+# setup busybox
+/bin/busybox --install -s
+
+if [ "$0" = "/init" ]; then
+    rm -f /linuxrc
+fi
+
+# create system directories
+[ -d /dev ] || mkdir -m 0755 /dev
+[ -d /root ] || mkdir -m 0700 /root
+for d in /sys /proc /tmp /var/lock /usr/bin /usr/sbin ${NEW_ROOT}; do
+    [ -d ${d} ] || mkdir -p ${d}
+done
+
+# mount virtual filesystems
+mount -t proc -o noexec,nosuid,nodev proc /proc
+mount -t sysfs -o nodev,noexec,nosuid sysfs /sys
+
+for x in $(cat /proc/cmdline); do
+    case "${x}" in
+        real_root=*)
+            REAL_ROOT=${x#*=}
+        ;;
+        root=*)
+            FAKE_ROOT=${x#*=}
+        ;;
+    esac
+done
+
+udev_start
+
+rootfs_init
+
+udev_stop
+
+move_mounts_to_chroot
+
+good_msg "Now switch to real root ..."
+exec /sbin/switch_root -c "/dev/console" "${NEW_ROOT}" "${REAL_INIT}" "${INIT_OPTS}"
+
+panic "A fatal error has occured since ${REAL_INIT} did not boot correctly."
