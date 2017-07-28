@@ -243,11 +243,6 @@ list_items=${list_items}${list_libraries}
 
 good_msg "Collect kernel modules ..."
 
-kernel_modules_sata="ahci ata_piix"
-kernel_modules_scsi="hpsa isci megaraid_sas mptsas mpt3sas mptspi nvme sd_mod vmw_pvscsi"
-kernel_modules_fs="ext2 ext4 xfs"
-kernel_modules_usb="ohci-hcd ohci-pci uhci-hcd ehci-hcd ehci-pci xhci-hcd xhci-pci usbhid hid hid-generic"
-
 file_modules=""
 for g in ${!kernel_modules_*}; do
     for m in ${!g}; do
