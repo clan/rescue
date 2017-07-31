@@ -131,17 +131,18 @@ list_dirs="./${KIND}"
 source ${PROG_LIST}
 for g in ${!conf_*}; do
     k=${g#conf_}
-    if [ "${k}" == "dirs" ] ; then
+    if [[ "${k}" == "dirs" ]] ; then
         echo ">>> collect dirs"
         for e in ${!g}; do
             list_dirs=${list_dirs}" ${e}"
         done
-    elif [ "${k}" == "files" ] ; then
+    elif [[ "${k}" =~ "files" ]] ; then
+        echo ">>> collect ${k}"
         for f in ${!g}; do
 	    list_confs=${list_confs}"$(gen_file ${f})\n"
         done
-    elif [ "${k}" == "executables" ] ; then
-        echo ">>> collect executables"
+    elif [[ "${k}" =~ "executables" ]] ; then
+        echo ">>> collect ${k}"
         for e in ${!g}; do
             fe=$(which $e)
             if [ "${e}" == "busybox" ] ; then
