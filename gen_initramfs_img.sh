@@ -136,10 +136,21 @@ for g in ${!conf_*}; do
         for e in ${!g}; do
             list_dirs=${list_dirs}" ${e}"
         done
+    elif [[ "${k}" =~ "file_" ]] ; then
+        echo ">>> collect ${k}"
+        a=(${!g})
+        if [[ ${#a[@]} == 2 ]] ; then
+            fdst=${a[0]}
+            fsrc=${a[1]}
+            fm=$(stat -c "%04a" "${fsrc}")
+            list_confs=${list_confs}"file ${fdst} ${fsrc} ${fm} 0 0\n"
+        else
+            die 1 "${k}(${!g}) must contains two element only"
+        fi
     elif [[ "${k}" =~ "files" ]] ; then
         echo ">>> collect ${k}"
         for f in ${!g}; do
-	    list_confs=${list_confs}"$(gen_file ${f})\n"
+            list_confs=${list_confs}"$(gen_file ${f})\n"
         done
     elif [[ "${k}" =~ "executables" ]] ; then
         echo ">>> collect ${k}"
@@ -148,7 +159,7 @@ for g in ${!conf_*}; do
             if [ "${e}" == "busybox" ] ; then
                 busybox_path=${fe}
             fi
-	    list_confs=${list_confs}"$(gen_file ${fe})\n"
+            list_confs=${list_confs}"$(gen_file ${fe})\n"
         done
     elif [ "${k}" == "link_to_busybox" ] ; then
         echo ">>> collect link to busybox"
