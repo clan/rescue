@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export LANG=C
 export PATH="/sbin:/usr/sbin:"${PATH}
 
 BOLD="\033[1m"
@@ -242,16 +243,34 @@ AWK_LDD='{
 }'
 
 good_msg "Find executables from lists ..."
-programs=$(echo -e "${list_items}" | awk "${AWK_EXEC}")
+programs=$(echo -e "${list_items}" | awk "${AWK_EXEC}" | sort | uniq)
 
-good_msg "Collect libraries from executables ..."
-libraries=$(ldd ${programs} | awk "${AWK_LDD}" | sort | uniq)
+programs_d=""
+programs_s=""
+good_msg "Split executables into static linked & shared"
+for f in ${programs}; do
+    ldd ${f} > /dev/null 2>&1
+    if [[ $? -eq 0 ]] ; then
+        programs_d=${programs_d}" ${f}"
+    else
+        programs_s=${programs_s}" ${f}"
+    fi
+done
+
+good_msg "Collect libraries from dynamic executables ..."
+libraries=$(ldd ${programs_d} | awk "${AWK_LDD}" | sort | uniq)
 list_libraries=""
 for l in ${libraries} ; do
     list_libraries=${list_libraries}"file ${l} ${l} 0755 0 0\n"
 done
-
 list_items=${list_items}${list_libraries}
+
+good_msg "Collect interpreter from static linked executables ..."
+list_interpreters=""
+for l in $(expr "$(readelf -l ${programs_s} 2> /dev/null | grep interpreter)" : ".*Requesting program interpreter: \([^] ]*\)" | sort | uniq) ; do
+    list_interpreters=${list_preters}"file ${l} ${l} 0755 0 0 \n"
+done
+list_items=${list_items}${list_interpreters}
 
 good_msg "Collect kernel modules ..."
 
