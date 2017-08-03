@@ -59,7 +59,11 @@ gen_file()
     local list_files=""
     if [ -h "${f}" ] ; then
         ft=$(readlink -e "${f}")
-        list_files=${list_filess}"slink ${fn} ${ft} 0777 0 0\n"
+        if [ "${fn%/*}" == "${ft%/*}" ] ; then
+            list_files=${list_filess}"slink ${fn} ${ft##*/} 0777 0 0\n"
+        else
+            list_files=${list_filess}"slink ${fn} ${ft} 0777 0 0\n"
+        fi
         fm=$(stat -c "%04a" "${ft}")
         list_files=${list_files}"file ${ft} ${ft} ${fm} 0 0\n"
     else
