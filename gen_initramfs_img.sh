@@ -133,6 +133,7 @@ slink /usr/lib lib64 0777 0 0
 
 list_confs=""
 list_dirs="./${KIND}"
+inter_dirs=""
 source ${PROG_LIST}
 for g in ${!conf_*}; do
     k=${g#conf_}
@@ -156,6 +157,7 @@ for g in ${!conf_*}; do
         echo ">>> collect ${k}"
         for f in ${!g}; do
             list_confs=${list_confs}"$(gen_file ${f})\n"
+            inter_dirs=${inter_dirs}"$(iter_dirname $f)\n"
         done
     elif [[ "${k}" =~ "executables" ]] ; then
         echo ">>> collect ${k}"
@@ -181,6 +183,9 @@ for g in ${!conf_*}; do
             list_confs=${list_confs}"slink ${fe} ${fb} 0777 0 0\n"
         done
     fi
+done
+for d in $(echo -e "${inter_dirs}" | sort | uniq); do
+    list_items=${list_items}"dir ${d} 0755 0 0\n"
 done
 list_items=${list_items}"${list_confs}"
 
