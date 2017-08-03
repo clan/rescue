@@ -149,7 +149,7 @@ fi
 # create system directories
 [ -d /dev ] || mkdir -m 0755 /dev
 [ -d /root ] || mkdir -m 0700 /root
-for d in /sys /proc /tmp /var/lock /usr/bin /usr/sbin ${NEW_ROOT}; do
+for d in /sys /proc /tmp /var/lock ; do
     [ -d ${d} ] || mkdir -p ${d}
 done
 
