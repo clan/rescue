@@ -81,7 +81,6 @@ udev_start()
 udev_stop()
 {
     good_msg "Try stop udev ..."
-
     # Stop udevd, we'll miss a few events while we run init, but we catch up
     for proc in /proc/[0-9]* ; do
         [ -x $proc/exe ] || continue
@@ -91,13 +90,15 @@ udev_stop()
 
 rootfs_init()
 {
+    [ -d ${NEW_ROOT} ] || mkdir -p ${NEW_ROOT}
+
     if [ -z "${REAL_ROOT}" ] ; then
         REAL_ROOT="${FAKE_ROOT}" 
     fi
 
     real_device=$(findfs ${REAL_ROOT})
     if [ ! -n "${real_device}" ] ; then
-    panic "Can't find root device ${REAL_ROOT}"
+        panic "Can't find root device ${REAL_ROOT}"
     fi
 
     good_msg "Detected root: ${real_device}"
@@ -119,12 +120,12 @@ move_mounts_to_chroot()
 {
     for fs in /run /dev /sys /proc; do
         if grep -qs "$fs" /proc/mounts; then
-        local chroot_dir="${NEW_ROOT}${fs}"
-        [ -d "${chroot_dir}" ] || mkdir -p "${chroot_dir}"
-        if ! mount --move $fs "${chroot_dir}" ; then
-            umount $fs || bad_msg "Failed to move and umount $fs!"
+            local chroot_dir="${NEW_ROOT}${fs}"
+            [ -d "${chroot_dir}" ] || mkdir -p "${chroot_dir}"
+            if ! mount --move $fs "${chroot_dir}" ; then
+                umount $fs || bad_msg "Failed to move and umount $fs!"
+            fi
         fi
-    fi
     done
 }
 
