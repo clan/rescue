@@ -220,16 +220,16 @@ udevd_bin="/sbin/udevd"
 
 list_udev=""
 list_udev=${list_udev}"file /sbin/udevd ${udevd_bin} 0755 0 0\n"
-list_udev=${list_udev}"dir /lib/udev 0755 0 0\n"
+list_udev=${list_udev}"dir /lib64/udev 0755 0 0\n"
 for u in ata_id scsi_id; do
-    list_udev=${list_udev}"file /lib/udev/${u} /lib/udev/${u} 0755 0 0\n"
+    list_udev=${list_udev}"file /lib64/udev/${u} /lib64/udev/${u} 0755 0 0\n"
 done
-list_udev=${list_udev}"dir /lib/udev/rules.d/ 0755 0 0\n"
+list_udev=${list_udev}"dir /lib64/udev/rules.d/ 0755 0 0\n"
 for u in 40-gentoo.rules \
          50-udev-default.rules \
          60-persistent-storage.rules \
          80-drivers.rules ; do
-    list_udev=${list_udev}"file /lib/udev/rules.d/${u} /lib/udev/rules.d/${u} 0644 0 0\n"
+    list_udev=${list_udev}"file /lib64/udev/rules.d/${u} /lib64/udev/rules.d/${u} 0644 0 0\n"
 done
 
 list_items=${list_items}${list_udev}
