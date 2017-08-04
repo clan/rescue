@@ -1,0 +1,45 @@
+#!/bin/sh
+
+if [[ -f /etc/hostname ]] ; then
+    hostname $(< /etc/hostname)
+else
+    hostname rescue-$(uname -m)
+fi
+
+touch /etc/filesystems
+
+[ -d /var/log ] || mkdir -p /var/log
+dmesg > /var/log/dmesg
+
+syslogd -O /var/log/messages -s 1024 -b 10 > /dev/null 2>&1
+
+echo
+echo ">>> Start sshd"
+[ -d /dev/pts ] || mkdir /dev/pts
+mount -t devpts devpts /dev/pts
+for d in /etc/ssh /var/empty ; do
+    [ -d "${d}" ] || mkdir -p ${d}
+done
+for k in rsa dsa ecdsa ed25519; do
+    ssh-keygen -t ${k} -f /etc/ssh/ssh_host_${k}_key -N '' > /dev/null 2>&1
+done
+touch /etc/ssh/sshd_config
+/usr/sbin/sshd -o "PermitRootLogin yes"
+echo
+
+if [[ -d /sys/class/dmi/id ]]; then
+    echo
+    [ -s /sys/class/dmi/id/board_vendor ] && {
+        echo -n " >> Board: "
+        cat /sys/class/dmi/id/board_vendor
+    }
+    [ -s /sys/class/dmi/id/product_name ] && {
+        echo -n " >> Product: "
+        cat /sys/class/dmi/id/product_name
+    }
+    echo -n " >> Kernel: "
+    uname -r
+    echo
+fi
+
+ifconfig lo up

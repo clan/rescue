@@ -1,0 +1,16 @@
+umask 022
+
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH
+
+EDITOR="/bin/vi"
+export EDITOR
+
+if [ -n "${BASH_VERSION}" ] ; then
+	PS1='\u@\h \w \$ '
+else
+	PS1="`whoami`@`uname -n | cut -f1 -d.` \$ "
+fi
+
+alias ls='ls --color=auto'
+#alias grep='grep --colour=auto'

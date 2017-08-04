@@ -1,0 +1,8 @@
+::sysinit:/etc/sysinit
+::shutdown:/etc/sysdown
+::ctrlaltdel:/sbin/reboot
+::restart:/sbin/reboot
+
+tty1::respawn:/sbin/getty 38400 tty1
+tty2::respawn:/sbin/getty 38400 tty2
+#ttyS0::respawn:/sbin/getty -L ttyS0 115200 vt100

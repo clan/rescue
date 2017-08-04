@@ -1,0 +1,4 @@
+root:x:0:root
+sshd:x:22:sshd
+tcpdump:x:81:tcpdump
+nobody:x:65534:nobody
