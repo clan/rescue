@@ -185,6 +185,7 @@ for g in ${!conf_*}; do
     fi
 done
 for d in $(echo -e "${inter_dirs}" | sort | uniq); do
+    [ "${d}" == "/" ] && continue
     list_items=${list_items}"dir ${d} 0755 0 0\n"
 done
 list_items=${list_items}"${list_confs}"
