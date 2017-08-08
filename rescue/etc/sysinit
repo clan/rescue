@@ -24,7 +24,7 @@ for k in rsa dsa ecdsa ed25519; do
     ssh-keygen -t ${k} -f /etc/ssh/ssh_host_${k}_key -N '' > /dev/null 2>&1
 done
 touch /etc/ssh/sshd_config
-/usr/sbin/sshd -o "PermitRootLogin yes"
+/usr/sbin/sshd -o "PermitRootLogin yes" -o "PermitEmptyPasswords yes"
 echo
 
 if [[ -d /sys/class/dmi/id ]]; then
