@@ -1,5 +1,31 @@
 #!/bin/sh
 
+parse_opt()
+{
+    case "$1" in
+        *\=*)
+        local key_name="`echo "$1" | cut -f1 -d=`"
+        local key_len=${#key_name}
+        local value_start=$((key_len+2))
+        echo "$1" | cut -c ${value_start}-
+        ;;
+    esac
+}
+
+for x in $(cat /proc/cmdline) ; do
+    case "${x}" in
+    ethx\=*)
+        x=$(parse_opt ${x})
+        NET_IFACE=$(echo ${x} | cut -d= -f1)
+        NET_IPADDR=$(echo ${x} | cut -d= -f2)
+        ;;
+    gw\=*)
+        x=$(parse_opt ${x})
+        NET_GATEWAY=${x}
+        ;;
+    esac
+done
+
 if [[ -f /etc/hostname ]] ; then
     hostname $(< /etc/hostname)
 else
@@ -43,3 +69,24 @@ if [[ -d /sys/class/dmi/id ]]; then
 fi
 
 ifconfig lo up
+
+while [ 1 ] ; do
+    echo " >> NIC found:" $(ls /sys/class/net)
+    if [[ -n "${NET_IFACE}" && -n "${NET_IPADDR}" ]] ; then
+        if [ ! -h /sys/class/net/${NET_IFACE} ] ; then
+            echo " !! NIC \`${NET_IFACE}' not exist"
+            break
+        fi
+        ip link set ${NET_IFACE} up
+        echo " >>> set dev ${NET_IFACE} ip address to ${NET_IPADDR}"
+        ip addr add dev ${NET_IFACE} ${NET_IPADDR} brd +
+        if [ $? != 0 ] ; then
+            break
+        fi
+        if [[ -n "${NET_GATEWAY}" ]] ; then
+            echo " >>> set gateway to ${NET_GATEWAY}"
+            ip route add default via ${NET_GATEWAY}
+        fi
+    fi
+    break
+done
