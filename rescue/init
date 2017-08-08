@@ -225,7 +225,7 @@ if [ ! -z "${RUN_MINISHELL}" ] ; then
 fi
 
 if [ ! -z "${RUN_GENTOO}" ] ; then
-    find_and_mount rescue.dat.xz
+    find_and_mount linux/rescue.dat.xz
 
     if [ $? -eq 0 ] ; then
         udev_stop
