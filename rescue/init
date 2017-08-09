@@ -127,11 +127,11 @@ find_and_mount()
             [ -z "${fstype}" ] && continue
             if mount -r -t ${fstype} ${d} ${mountdir} > /dev/null 2>&1 ; then
                 if [ -s ${mountdir}/${loopfile} ] ; then
-		    md5now=$(md5sum ${mountdir}/${loopfile} | cut -d ' ' -f1)
-		    md5exp=$(cat ${mountdir}/${loopfile}.md5sum | cut -d ' ' -f1)
+                    md5now=$(md5sum ${mountdir}/${loopfile} | cut -d ' ' -f1)
+                    md5exp=$(cat ${mountdir}/${loopfile}.md5sum | cut -d ' ' -f1)
                     if [ "${md5now}" = "${md5exp}" ] ; then
                         filefound=${mountdir}/${loopfile}
-			break
+                        break
                     else
                         bad_msg "found file ${loopfile}, but md5 chksum is invalid"
                     fi
@@ -150,17 +150,17 @@ find_and_mount()
             good_msg "Will try again"
             continue
         else
-	    echo
+            echo
             break
         fi
     done
 
     if [ ! -z "${filefound}" ] ; then
         if [ ! -z "${DOCACHE}" ] ; then
-	    good_msg "Try caching files ${filefount}"
-	fi
+            good_msg "Try caching files ${filefount}"
+        fi
         mount -t squashfs ${filefound} ${NEW_ROOT}
-	return 0
+        return 0
     fi
 
     return 1
@@ -231,8 +231,8 @@ if [ ! -z "${RUN_GENTOO}" ] ; then
         udev_stop
         move_mounts_to_chroot
 
-	good_msg "Now siwtch to gentoo system..."
-	exec switch_root -c /dev/console ${NEW_ROOT} /sbin/init
+        good_msg "Now siwtch to gentoo system..."
+        exec switch_root -c /dev/console ${NEW_ROOT} /sbin/init
     else
         exec /bin/sh
     fi
