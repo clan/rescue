@@ -331,8 +331,9 @@ list_items=${list_items}${list_modules}
 
 good_msg "Build ${KIND}-${KV}.img"
 echo -e "${list_items}" | \
-    sort -k2 | \
-    uniq | \
+    awk -f sort.awk | \
+    sort -k 1h -k 3 | \
+    cut -d" " -f 2- | \
     tee ${KIND}-${KV}.list | \
     /usr/src/linux/usr/gen_init_cpio - | \
     xz -e --check=none -z -f -9 > ${KIND}-${KV}.img
