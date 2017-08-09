@@ -226,10 +226,18 @@ for u in ata_id scsi_id; do
     list_udev=${list_udev}"file /lib64/udev/${u} /lib64/udev/${u} 0755 0 0\n"
 done
 list_udev=${list_udev}"dir /lib64/udev/rules.d/ 0755 0 0\n"
-for u in 40-gentoo.rules \
+for u in 10-dm.rules \
+         11-dm-lvm.rules \
+         13-dm-disk.rules \
+         40-gentoo.rules \
          50-udev-default.rules \
+         60-cdrom_id.rules \
          60-persistent-storage.rules \
-         80-drivers.rules ; do
+         63-md-raid-arrays.rules \
+         64-md-raid-assembly.rules \
+         69-dm-lvm-metad.rules \
+         80-drivers.rules \
+         95-dm-notify.rules ; do
     list_udev=${list_udev}"file /lib64/udev/rules.d/${u} /lib64/udev/rules.d/${u} 0644 0 0\n"
 done
 

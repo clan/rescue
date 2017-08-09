@@ -40,6 +40,11 @@ dmesg > /var/log/dmesg
 syslogd -O /var/log/messages -s 1024 -b 10 > /dev/null 2>&1
 
 echo
+
+echo ">>> Start lvmetad"
+[ -d /run/lvm ] || mkdir /run/lvm
+lvmetad
+
 echo ">>> Start sshd"
 [ -d /dev/pts ] || mkdir /dev/pts
 mount -t devpts devpts /dev/pts
