@@ -1,7 +1,7 @@
 function check(k)
 {
     if (NF != format[k]["nf"]) {
-        print "0 malformed line:", $0
+        print "malformed line:", $0 > "/dev/stderr"
     } else {
         print format[k]["n"], $0
     }
@@ -10,11 +10,11 @@ function check(k)
 BEGIN {
     format["dir"]["n"] = 1
     format["dir"]["nf"] = 5
-    format["nod"]["n"] = 2
+    format["nod"]["n"] = 3
     format["nod"]["nf"] = 8
-    format["file"]["n"] = 2
+    format["file"]["n"] = 3
     format["file"]["nf"] = 6
-    format["slink"]["n"] = 3
+    format["slink"]["n"] = 2
     format["slink"]["nf"] = 6
 }
 
@@ -31,6 +31,6 @@ BEGIN {
     } else if ($0 ~ /^slink\s+\//) {
         check("slink")
     } else {
-        print "0 malformed line:", $0
+        print "malformed line:", $0 > "/dev/stderr"
     }
 }
