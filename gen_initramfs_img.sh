@@ -34,44 +34,52 @@ die()
     exit $ret
 }
 
-iter_dirname()
+iter_file()
 {
-    d0=$1
-    while [ True ] ; do
-        d1=$(dirname ${d0})
-        if [ "${d1}" == "." -o "${d0}" = "${d1}" ] ; then
+    local f=$1
+    local fm=
+    local ft=
+    local nm=
+
+    while [ 1 ] ; do
+        if [[ -z "$f" || $f = "/" || $f = "." ]] ; then
             break
         fi
-        echo ${d1}
-        d0=${d1}
+        if [[ -h ${f} ]] ; then
+            ft=$(readlink -e ${f})
+            if [ "${f%/*}" == "${ft%/*}" ] ; then
+                echo "slink ${f} ${ft##*/} 0777 0 0\n"
+            else
+                echo "slink ${f} ${ft} 0777 0 0\n"
+            fi
+	    iter_file ${ft}
+        elif [[ -d ${f} ]] ; then
+            echo "dir ${f} 0755 0 0"
+        elif [[ -b ${f} || -c ${f} ]] ; then
+	    [ -b "${f}" ] && ft="b" || ft="c"
+	    fm=$(stat -c "%04a" "${f}")
+	    nm=$(printf "%d %d" $(LANG=C stat -c "0x%t 0x%T" "${f}"))
+            echo "nod ${f} ${fm} 0 0 ${ft} ${nm}"
+        elif [[ -o ${f} ]] ; then
+            echo "pipe ${f}"
+        elif [[ -S ${f} ]] ; then
+            echo "sock ${f}"
+        elif [[ -f ${f} ]] ; then
+	    fm=$(stat -c "%04a" "${f}")
+            echo "file ${f} ${f} ${fm} 0 0"
+        else
+            die 1 "unknown file type: ${f}"
+        fi
+	f=$(dirname ${f})
     done
 }
 
-gen_file()
+iter_files()
 {
-    f=$1
-    if [[ "$#" -lt 2 ]] ; then
-        fn=${f}
-    else
-        fn=$2
-    fi
-
-    local list_files=""
-    if [ -h "${f}" ] ; then
-        ft=$(readlink -e "${f}")
-        if [ "${fn%/*}" == "${ft%/*}" ] ; then
-            list_files=${list_filess}"slink ${fn} ${ft##*/} 0777 0 0\n"
-        else
-            list_files=${list_filess}"slink ${fn} ${ft} 0777 0 0\n"
-        fi
-        fm=$(stat -c "%04a" "${ft}")
-        list_files=${list_files}"file ${ft} ${ft} ${fm} 0 0\n"
-    else
-        fm=$(stat -c "%04a" "${f}")
-        list_files=${list_files}"file ${fn} ${f} ${fm} 0 0\n"
-    fi
-
-    echo -e ${list_files}
+    while [ $# -ne 0 ] ; do
+        iter_file $1
+	shift
+    done | sort | uniq
 }
 
 ARGVS=$(getopt -o k: -- "$@") || die $? getopt failed.
@@ -94,85 +102,60 @@ fi
 
 KV=$1
 [ -z "${KV}" ] && KV=$(uname -r)
-km_directory="/lib/modules/${KV}/"
+km_directory="/lib64/modules/${KV}"
 if [ ! -d "${km_directory}" ] ; then
     die 1 "modules directory for kernel ${KV} not found"
 fi
 good_msg "build initramfs image w/ kernel ${KV}"
 
 list_items="
-slink /linuxrc init 0777 0 0
-
-# /bin
-dir /bin 0755 0 0
-
-dir /dev 0755 0 0
-nod /dev/console 0660 0 0 c 5 1
-nod /dev/null 0660 0 0 c 1 3
-dir /dev/shm 1777 0 0
-nod /dev/tty0 0600 0 0 c 4 0
-nod /dev/tty1 0600 0 0 c 4 1
-nod /dev/ttyS0 0600 0 0 c 4 64
-nod /dev/zero 0660 0 0 c 1 5
-
 dir /etc 0755 0 0
-
-dir /lib64 0755 0 0
-slink /lib lib64 0777 0 0
-
 dir /run 0755 0 0
-
-dir /sbin 0755 0 0
-
-dir /usr 0755 0 0
-dir /usr/bin 0755 0 0
-dir /usr/sbin 0755 0 0
-dir /usr/lib64 0755 0 0
-slink /usr/lib lib64 0777 0 0
 "
 
 list_confs=""
-list_dirs="./${KIND}"
-inter_dirs=""
+list_dirs=""
+list_devices=""
+list_executables=""
+list_files=""
+list_sdirs="./${KIND}"
 source ${PROG_LIST}
 for g in ${!conf_*}; do
     k=${g#conf_}
-    if [[ "${k}" == "dirs" ]] ; then
-        echo ">>> collect dirs"
-        for e in ${!g}; do
-            list_dirs=${list_dirs}" ${e}"
-        done
-    elif [[ "${k}" =~ "file_" ]] ; then
-        echo ">>> collect ${k}"
+    echo ">>> collect ${k}"
+    if [[ ${k} == "dirs" ]] ; then
+        list_sdirs=${list_sdirs}" ${!g}"
+    elif [[ ${k} =~ "files" ]] ; then
+        list_files=${list_files}" ${!g}"
+    elif [[ ${k} =~ ^(slink|file)_[[:print:]]+$ ]] ; then
+        kk=${BASH_REMATCH[1]}
         a=(${!g})
         if [[ ${#a[@]} == 2 ]] ; then
             fdst=${a[0]}
             fsrc=${a[1]}
-            fm=$(stat -c "%04a" "${fsrc}")
-            list_confs=${list_confs}"file ${fdst} ${fsrc} ${fm} 0 0\n"
+	    if [[ $kk == "file" ]] ; then
+                fm=$(stat -c "%04a" "${fsrc}")
+	    else
+	        fm="0777"
+	    fi
+            list_confs=${list_confs}"${kk} ${fdst} ${fsrc} ${fm} 0 0\n"
         else
             die 1 "${k}(${!g}) must contains two element only"
         fi
-    elif [[ "${k}" =~ "files" ]] ; then
-        echo ">>> collect ${k}"
-        for f in ${!g}; do
-            list_confs=${list_confs}"$(gen_file ${f})\n"
-            inter_dirs=${inter_dirs}"$(iter_dirname $f)\n"
-        done
-    elif [[ "${k}" =~ "executables" ]] ; then
-        echo ">>> collect ${k}"
+    elif [[ ${k} =~ "devices" ]] ; then
+	for f in ${!g}; do
+	    if [[ "${f:0:1}" != "/" ]] ; then
+	        f="/dev/${f}"
+	    fi
+	    list_devices=${list_devices}" ${f}"
+	done
+    elif [[ ${k} =~ "executables" ]] ; then
         for e in ${!g}; do
-            fe=$(which $e)
-            if [ "${e}" == "busybox" ] ; then
-                busybox_path=${fe}
-            fi
-            list_confs=${list_confs}"$(gen_file ${fe})\n"
+	    list_executables=${list_executables}" $(which $e)"
         done
-    elif [ "${k}" == "link_to_busybox" ] ; then
-        echo ">>> collect link to busybox"
-        if [ -z "${busybox_path}" ] ; then
-            die 1 "busybox not included in executables, please fix!"
-        fi
+    elif [ ${k} == "link_to_busybox" ] ; then
+        busybox_path=$(which busybox)
+	list_executables=${list_executables}" ${busybox_path}"
         for s in ${!g}; do
             fe=$(which $s)
             if [ "${fe%/*}" == "${busybox_path%/*}" ] ; then
@@ -184,21 +167,17 @@ for g in ${!conf_*}; do
         done
     fi
 done
-for d in $(echo -e "${inter_dirs}" | sort | uniq); do
-    [ "${d}" == "/" ] && continue
-    list_items=${list_items}"dir ${d} 0755 0 0\n"
-done
-list_items=${list_items}"${list_confs}"
+list_items=${list_items}"${list_confs}\n"
 
 list_confs=""
-for d in ${list_dirs}; do
+for d in ${list_sdirs}; do
     if [ -d "${d}" ] ; then
         for f in $(find ${d}); do
-            if [[ "${d}" =~ "./" ]] ; then
+            if [[ ${d:0:1} == "/" ]] ; then
+                fn=${f}
+            else
                 [[ "${f}" == "${d}" ]] && continue
                 fn=${f#${d}/}
-            else
-                fn=${f}
             fi
             if [[ "${fn:0:1}" != "/" ]] ; then
                 fn=/${fn}
@@ -206,12 +185,21 @@ for d in ${list_dirs}; do
             if [ -d ${f} ] ; then
                 list_confs=${list_confs}"dir ${fn} 0755 0 0\n"
             else
-                list_confs=${list_confs}"$(gen_file ${f} ${fn})\n"
+	        if [[ -h ${f} ]] ; then
+		    list_confs=${list_confs}"slink ${f} $(readlink ${f}) 0777 0 0\n"
+		else
+	            fm=$(stat -c "%04a" "${f}")
+                    list_confs=${list_confs}"file ${fn} ${f} ${fm} 0 0\n"
+		fi
             fi
         done
+    else
+        die 1 "directory ${d} not found"
     fi
 done
 list_items=${list_items}"${list_confs}"
+
+list_iters="$(iter_files $(echo "${list_files}" "${list_devices}" "${list_executables}" | sed 's/ /\n/g' | sort | uniq))"
 
 good_msg "Collect udev files ..."
 
@@ -219,13 +207,11 @@ udevd_bin="/sbin/udevd"
 [ ! -e "${udevd_bin}" ] && udevd_bin="/usr/lib/systemd/systemd-udevd"
 [ ! -e "${udevd_bin}" ] && udevd_bin="/lib/systemd/systemd-udevd"
 
-list_udev=""
 list_udev=${list_udev}"file /sbin/udevd ${udevd_bin} 0755 0 0\n"
-list_udev=${list_udev}"dir /lib64/udev 0755 0 0\n"
+list_udevs=""
 for u in ata_id scsi_id; do
-    list_udev=${list_udev}"file /lib64/udev/${u} /lib64/udev/${u} 0755 0 0\n"
+    list_udevs=${list_udevs}"/lib64/udev/${u}\n"
 done
-list_udev=${list_udev}"dir /lib64/udev/rules.d/ 0755 0 0\n"
 for u in 10-dm.rules \
          11-dm-lvm.rules \
          13-dm-disk.rules \
@@ -238,10 +224,11 @@ for u in 10-dm.rules \
          69-dm-lvm-metad.rules \
          80-drivers.rules \
          95-dm-notify.rules ; do
-    list_udev=${list_udev}"file /lib64/udev/rules.d/${u} /lib64/udev/rules.d/${u} 0644 0 0\n"
+    list_udevs=${list_udevs}"/lib64/udev/rules.d/${u}\n"
 done
+list_udevs="$(iter_files $(echo -e "${list_udevs}" | sort | uniq))"
 
-list_items=${list_items}${list_udev}
+list_items=${list_items}${list_iters}"\n"${list_udev}"\n"${list_udevs}"\n"
 
 AWK_EXEC='{
     if ($1 == "#") { next }
@@ -279,16 +266,29 @@ good_msg "Collect libraries from dynamic executables ..."
 libraries=$(ldd ${programs_d} | awk "${AWK_LDD}" | sort | uniq)
 list_libraries=""
 for l in ${libraries} ; do
-    list_libraries=${list_libraries}"file ${l} ${l} 0755 0 0\n"
+    list_libraries=${list_libraries}"${l}\n"
 done
-list_items=${list_items}${list_libraries}
 
 good_msg "Collect interpreter from static linked executables ..."
 list_interpreters=""
 for l in $(expr "$(readelf -l ${programs_s} 2> /dev/null | grep interpreter)" : ".*Requesting program interpreter: \([^] ]*\)" | sort | uniq) ; do
-    list_interpreters=${list_preters}"file ${l} ${l} 0755 0 0 \n"
+    list_interpreters=${list_preters}"${l}\n"
 done
-list_items=${list_items}${list_interpreters}
+
+# just copy all libraries to (/usr)?/lib(32|64)?/
+list_relocated=
+for l in $(echo -e "${list_libraries}" "${list_interpreters}" | sort | uniq); do
+    if [[ ${l} =~ ^((/usr)?/lib(32|64)?/)[[:print:]]+ ]] ; then
+        lp=${BASH_REMATCH[1]}
+	ln=$(basename ${l})
+	lm=$(stat -L -c "%04a" "${l}")
+	list_relocated=${list_relocated}"file ${lp}${ln} ${l} ${lm} 0 0\n"
+    else
+        die 1 "${l} is in unexpected path"
+    fi
+done
+
+list_items=${list_items}"${list_relocated}\n"
 
 good_msg "Collect kernel modules ..."
 
@@ -299,7 +299,7 @@ for g in ${!kernel_modules_*}; do
         if [ -z "${fm}" ] ; then
             bad_msg "module ${m} not found"
         else
-            fm=${fm#${km_directory}}
+            fm=${fm#${km_directory}/}
             file_modules=${file_modules}"${fm}\n"
             for d in $(grep ${fm} ${km_directory}/modules.dep | cut -d\: -f2); do
                 file_modules=${file_modules}"${d}\n"
@@ -308,32 +308,21 @@ for g in ${!kernel_modules_*}; do
     done
 done
 
-dir_modules=""
+list_modules="${km_directory}/modules.builtin
+${km_directory}/modules.order\n"
 for m in $(echo -e "${file_modules}" | sort | uniq); do
-    d=${m#${km_directory}}
-    dir_modules=${dir_modules}"$(iter_dirname ${d})\n"
+    list_modules=${list_modules}"${km_directory}/${m}\n"
 done
+list_items=${list_items}"$(iter_files $(echo -e "${list_modules}" | sort | uniq))\n"
 
-list_modules_dir="dir /lib64/modules 0755 0 0
-dir /lib64/modules/${KV} 0755 0 0
-file /lib64/modules/${KV}/modules.builtin /lib/modules/${KV}/modules.builtin 0644 0 0
-file /lib64/modules/${KV}/modules.order /lib/modules/${KV}/modules.order 0644 0 0\n"
-for d in $(echo -e "${dir_modules}" | sort | uniq); do
-    list_modules_dir=${list_modules_dir}"dir /lib64/modules/${KV}/${d} 0755 0 0\n"
-done
-list_items=${list_items}${list_modules_dir}
-
-list_modules=""
-for m in $(echo -e "${file_modules}" | sort | uniq); do
-    list_modules=${list_modules}"file /lib64/modules/${KV}/${m} ${km_directory}${m} 0644 0 0\n"
-done
-list_items=${list_items}${list_modules}
-
-good_msg "Build ${KIND}-${KV}.img"
+good_msg "Generate ${KIND}-${KV}.list"
 echo -e "${list_items}" | \
     awk -f sort.awk | \
     sort -k 1h -k 3 | \
-    cut -d" " -f 2- | \
-    tee ${KIND}-${KV}.list | \
-    /usr/src/linux/usr/gen_init_cpio - | \
+    uniq | \
+    cut -d" " -f 2- > ${KIND}-${KV}.list
+
+good_msg "Build ${KIND}-${KV}.img"
+cat ${KIND}-${KV}.list | \
+    /usr/src/linux.build/usr/gen_init_cpio - | \
     xz -e --check=none -z -f -9 > ${KIND}-${KV}.img
