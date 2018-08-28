@@ -240,8 +240,9 @@ list_udevs="$(iter_files $(echo -e "${list_udevs}" | sort | uniq))"
 list_items=${list_items}${list_iters}"\n"${list_udev}"\n"${list_udevs}"\n"
 
 AWK_EXEC='{
-    if ($1 == "#") { next }
-    if (NF == 6 && $1 == "file") {
+    if ($1 == "#") {
+        next
+    } else if (NF == 6 && $1 == "file") {
         if (and($4, 0111)) {
             print $3
         }
@@ -249,10 +250,16 @@ AWK_EXEC='{
 }'
 
 AWK_LDD='{
-    if (NF == 2 && $1 ~ /^\/lib/) {
+    if (NF == 1 && $1 ~ /\:$/) {
+        next
+    } else if (NF == 2 && $1 ~ /^linux-vdso.so/) {
+        next
+    } else if (NF == 2 && $1 ~ /^\/lib/) {
         print $1
     } else if (NF == 4 && $1 ~ /^lib/ && $2 == "=>") {
         print $3
+    } else {
+        print "unhandled line format: \"", $0, "\"" > "/dev/stderr"
     }
 }'
 
@@ -306,7 +313,10 @@ for g in ${!kernel_modules_*}; do
     for m in ${!g}; do
         fm="$(find ${km_directory} -name "${m}.ko")"
         if [ -z "${fm}" ] ; then
-            bad_msg "module ${m} not found"
+            grep "/${m}.ko" ${km_directory}/modules.builtin > /dev/null 2>&1
+            if [ $? -ne 0 ] ; then
+                bad_msg "module ${m} not found"
+            fi
         else
             fm=${fm#${km_directory}/}
             file_modules=${file_modules}"${fm}\n"
@@ -316,10 +326,11 @@ for g in ${!kernel_modules_*}; do
         fi
     done
 done
+file_modules=$(echo -e "${file_modules}" | sort | uniq)
 
 list_modules="${km_directory}/modules.builtin
 ${km_directory}/modules.order\n"
-for m in $(echo -e "${file_modules}" | sort | uniq); do
+for m in ${file_modules}; do
     list_modules=${list_modules}"${km_directory}/${m}\n"
 done
 list_items=${list_items}"$(iter_files $(echo -e "${list_modules}" | sort | uniq))\n"
