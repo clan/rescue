@@ -52,25 +52,25 @@ iter_file()
             else
                 echo "slink ${f} ${ft} 0777 0 0\n"
             fi
-	    iter_file ${ft}
+            iter_file ${ft}
         elif [[ -d ${f} ]] ; then
             echo "dir ${f} 0755 0 0"
         elif [[ -b ${f} || -c ${f} ]] ; then
-	    [ -b "${f}" ] && ft="b" || ft="c"
-	    fm=$(stat -c "%04a" "${f}")
-	    nm=$(printf "%d %d" $(LANG=C stat -c "0x%t 0x%T" "${f}"))
+            [ -b "${f}" ] && ft="b" || ft="c"
+            fm=$(stat -c "%04a" "${f}")
+            nm=$(printf "%d %d" $(LANG=C stat -c "0x%t 0x%T" "${f}"))
             echo "nod ${f} ${fm} 0 0 ${ft} ${nm}"
         elif [[ -o ${f} ]] ; then
             echo "pipe ${f}"
         elif [[ -S ${f} ]] ; then
             echo "sock ${f}"
         elif [[ -f ${f} ]] ; then
-	    fm=$(stat -c "%04a" "${f}")
+            fm=$(stat -c "%04a" "${f}")
             echo "file ${f} ${f} ${fm} 0 0"
         else
             die 1 "unknown file type: ${f}"
         fi
-	f=$(dirname ${f})
+        f=$(dirname ${f})
     done
 }
 
@@ -78,7 +78,7 @@ iter_files()
 {
     while [ $# -ne 0 ] ; do
         iter_file $1
-	shift
+        shift
     done | sort | uniq
 }
 
@@ -94,6 +94,15 @@ while true; do
         *) die 1 "getopt internal error!";;
     esac
 done
+
+for f in /usr/src/linux.build/usr/gen_init_cpio /usr/src/linux/usr/gen_init_cpio ; do
+    if [[ -x ${f} ]] ; then
+        CPIO_CMD=${f}
+    fi
+done
+if [[ -z ${CPIO_CMD} ]] ; then
+    die 1 "gen_init_cpio not found"
+fi
 
 PROG_LIST=${KIND}.conf
 if [ ! -s "${PROG_LIST}" ] ; then
@@ -133,29 +142,29 @@ for g in ${!conf_*}; do
         if [[ ${#a[@]} == 2 ]] ; then
             fdst=${a[0]}
             fsrc=${a[1]}
-	    if [[ $kk == "file" ]] ; then
+            if [[ $kk == "file" ]] ; then
                 fm=$(stat -c "%04a" "${fsrc}")
-	    else
-	        fm="0777"
-	    fi
+            else
+                fm="0777"
+            fi
             list_confs=${list_confs}"${kk} ${fdst} ${fsrc} ${fm} 0 0\n"
         else
             die 1 "${k}(${!g}) must contains two element only"
         fi
     elif [[ ${k} =~ "devices" ]] ; then
-	for f in ${!g}; do
-	    if [[ "${f:0:1}" != "/" ]] ; then
-	        f="/dev/${f}"
-	    fi
-	    list_devices=${list_devices}" ${f}"
-	done
+        for f in ${!g}; do
+            if [[ "${f:0:1}" != "/" ]] ; then
+                f="/dev/${f}"
+            fi
+            list_devices=${list_devices}" ${f}"
+        done
     elif [[ ${k} =~ "executables" ]] ; then
         for e in ${!g}; do
-	    list_executables=${list_executables}" $(which $e)"
+            list_executables=${list_executables}" $(which $e)"
         done
     elif [ ${k} == "link_to_busybox" ] ; then
         busybox_path=$(which busybox)
-	list_executables=${list_executables}" ${busybox_path}"
+        list_executables=${list_executables}" ${busybox_path}"
         for s in ${!g}; do
             fe=$(which $s)
             if [ "${fe%/*}" == "${busybox_path%/*}" ] ; then
@@ -185,12 +194,12 @@ for d in ${list_sdirs}; do
             if [ -d ${f} ] ; then
                 list_confs=${list_confs}"dir ${fn} 0755 0 0\n"
             else
-	        if [[ -h ${f} ]] ; then
-		    list_confs=${list_confs}"slink ${f} $(readlink ${f}) 0777 0 0\n"
-		else
-	            fm=$(stat -c "%04a" "${f}")
+                if [[ -h ${f} ]] ; then
+                    list_confs=${list_confs}"slink ${f} $(readlink ${f}) 0777 0 0\n"
+                else
+                    fm=$(stat -c "%04a" "${f}")
                     list_confs=${list_confs}"file ${fn} ${f} ${fm} 0 0\n"
-		fi
+                fi
             fi
         done
     else
@@ -280,9 +289,9 @@ list_relocated=
 for l in $(echo -e "${list_libraries}" "${list_interpreters}" | sort | uniq); do
     if [[ ${l} =~ ^((/usr)?/lib(32|64)?/)[[:print:]]+ ]] ; then
         lp=${BASH_REMATCH[1]}
-	ln=$(basename ${l})
-	lm=$(stat -L -c "%04a" "${l}")
-	list_relocated=${list_relocated}"file ${lp}${ln} ${l} ${lm} 0 0\n"
+        ln=$(basename ${l})
+        lm=$(stat -L -c "%04a" "${l}")
+        list_relocated=${list_relocated}"file ${lp}${ln} ${l} ${lm} 0 0\n"
     else
         die 1 "${l} is in unexpected path"
     fi
@@ -324,5 +333,5 @@ echo -e "${list_items}" | \
 
 good_msg "Build ${KIND}-${KV}.img"
 cat ${KIND}-${KV}.list | \
-    /usr/src/linux.build/usr/gen_init_cpio - | \
+    ${CPIO_CMD} - | \
     xz -e --check=none -z -f -9 > ${KIND}-${KV}.img
