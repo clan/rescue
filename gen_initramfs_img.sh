@@ -22,7 +22,7 @@ bad_msg()
     msg="$@"
     msg="${msg:-...}"
 
-    echo -e "${BAD}>>${NORMAL} ${msg} ${NORMAL}"
+    >&2 echo -e "${BAD}>>${NORMAL} ${msg} ${NORMAL}"
 }
 
 die()
@@ -82,6 +82,56 @@ iter_files()
     done | sort | uniq
 }
 
+find_km()
+{
+    if [ $# -ne 1 ] ; then
+        die 1 "find_km called w/ $# args"
+    fi
+
+    local m=$1
+    local fms=""
+
+    local fm="$(find ${km_directory} -name "${m}.ko")"
+    if [ -z "${fm}" ] ; then
+        grep -E "/${m}.ko$" ${km_directory}/modules.builtin > /dev/null 2>&1
+        if [ $? -eq 0 ] ; then
+            return
+        fi
+        local fm=$(grep -E "^alias ${m} " ${km_directory}/modules.alias | awk '{print $3}')
+        if [ -z "${fm}" ] ; then
+            local fm=$(grep -E "^alias .* ${m}$" ${km_directory}/modules.alias | awk '{print $2}')
+            if [ -z "${fm}" ] ; then
+                bad_msg "module ${m} not found"
+                return
+            fi
+        fi
+        for d in $(echo -e ${fm} | sort | uniq); do
+            if [[ ${d} =~ .*:.* ]] ; then
+                continue
+            fi
+            if [ -v "km_aliases[${d}]" ] ; then
+                continue
+            fi
+            km_aliases[${d}]=1
+            local fms=${fms}"$(find_km ${d})"
+        done
+    else
+        local fm=${fm#${km_directory}/}
+        local fms=${fms}"${fm}\n"
+        for d in $(grep "${fm}:" ${km_directory}/modules.dep | cut -d\: -f2); do
+            if [ -v "km_modules[${d}]" ] ; then
+                continue
+            fi
+            km_modules[${d}]=1
+            local fms=${fms}"${d}\n"
+        done
+    fi
+
+    if [ ! -z "${fms}" ] ; then
+        echo "${fms}"
+    fi
+}
+
 ARGVS=$(getopt -o k: -- "$@") || die $? getopt failed.
 eval set -- "$ARGVS"
 
@@ -116,6 +166,9 @@ if [ ! -d "${km_directory}" ] ; then
     die 1 "modules directory for kernel ${KV} not found"
 fi
 good_msg "build initramfs image w/ kernel ${KV}"
+
+declare -A km_aliases
+declare -A km_modules
 
 list_items="
 dir /etc 0755 0 0
@@ -311,26 +364,40 @@ good_msg "Collect kernel modules ..."
 file_modules=""
 for g in ${!kernel_modules_*}; do
     for m in ${!g}; do
-        fm="$(find ${km_directory} -name "${m}.ko")"
-        if [ -z "${fm}" ] ; then
-            grep "/${m}.ko" ${km_directory}/modules.builtin > /dev/null 2>&1
-            if [ $? -ne 0 ] ; then
-                bad_msg "module ${m} not found"
-            fi
-        else
-            fm=${fm#${km_directory}/}
-            file_modules=${file_modules}"${fm}\n"
-            for d in $(grep ${fm} ${km_directory}/modules.dep | cut -d\: -f2); do
-                file_modules=${file_modules}"${d}\n"
-            done
+        fms=$(find_km ${m})
+        if [ ! -z ${fms} ] ; then
+            file_modules=${file_modules}"${fms}\n"
         fi
     done
 done
 file_modules=$(echo -e "${file_modules}" | sort | uniq)
 
-list_modules="${km_directory}/modules.builtin
-${km_directory}/modules.order\n"
+AWK_SOFTDEP='{
+    if ($3 == "pre:" || $3 == "post:") {
+        for (i = 4; i <= NF; i++) {
+            print $i
+        }
+    } else {
+        print "softdep: malformed line: \"", $0, "\"" > "/dev/stderr"
+    }
+}'
+
+file_softdeps=""
 for m in ${file_modules}; do
+    m=${m%.ko}
+    m=${m##*/}
+    for d in $(grep -E "^softdep ${m} " ${km_directory}/modules.softdep | awk "${AWK_SOFTDEP}"); do
+        file_softdeps=$(find_km ${d})
+    done
+done
+file_softdeps=$(echo -e "${file_softdeps}" | sort | uniq)
+#echo ${file_softdeps}
+
+list_modules="${km_directory}/modules.alias\n
+${km_directory}/modules.builtin\n
+${km_directory}/modules.order\n
+${km_directory}/modules.softdep\n"
+for m in ${file_modules} ${file_softdeps}; do
     list_modules=${list_modules}"${km_directory}/${m}\n"
 done
 list_items=${list_items}"$(iter_files $(echo -e "${list_modules}" | sort | uniq))\n"
