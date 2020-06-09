@@ -101,7 +101,10 @@ find_km()
         if [ -z "${fm}" ] ; then
             local fm=$(grep -E "^alias .* ${m}$" ${km_directory}/modules.alias | awk '{print $2}')
             if [ -z "${fm}" ] ; then
-                bad_msg "module ${m} not found"
+                # ignore module if module has '*'
+                if [[ ! ${m} =~ [[:print:]]+\*[[:print:]]* ]] ; then
+                    bad_msg "module ${m} not found"
+                fi
                 return
             fi
         fi
