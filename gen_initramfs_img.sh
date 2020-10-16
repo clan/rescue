@@ -164,7 +164,7 @@ fi
 
 KV=$1
 [ -z "${KV}" ] && KV=$(uname -r)
-km_directory="/lib64/modules/${KV}"
+km_directory="/lib/modules/${KV}"
 if [ ! -d "${km_directory}" ] ; then
     die 1 "modules directory for kernel ${KV} not found"
 fi
@@ -176,6 +176,7 @@ declare -A km_modules
 list_items="
 dir /etc 0755 0 0
 dir /run 0755 0 0
+dir /lib64 0755 0 0
 "
 
 list_confs=""
@@ -275,7 +276,7 @@ udevd_bin="/sbin/udevd"
 list_udev=${list_udev}"file /sbin/udevd ${udevd_bin} 0755 0 0\n"
 list_udevs=""
 for u in ata_id scsi_id; do
-    list_udevs=${list_udevs}"/lib64/udev/${u}\n"
+    list_udevs=${list_udevs}"/lib/udev/${u}\n"
 done
 for u in 10-dm.rules \
          11-dm-lvm.rules \
@@ -283,13 +284,14 @@ for u in 10-dm.rules \
          40-gentoo.rules \
          50-udev-default.rules \
          60-cdrom_id.rules \
+         60-input-id.rules \
          60-persistent-storage.rules \
          63-md-raid-arrays.rules \
          64-md-raid-assembly.rules \
          69-dm-lvm-metad.rules \
          80-drivers.rules \
          95-dm-notify.rules ; do
-    list_udevs=${list_udevs}"/lib64/udev/rules.d/${u}\n"
+    list_udevs=${list_udevs}"/lib/udev/rules.d/${u}\n"
 done
 list_udevs="$(iter_files $(echo -e "${list_udevs}" | sort | uniq))"
 
@@ -306,7 +308,7 @@ AWK_EXEC='{
 }'
 
 AWK_LDD='{
-    if (NF == 1 && $1 ~ /\:$/) {
+    if (NF == 1 && $1 ~ /:$/) {
         next
     } else if (NF == 2 && $1 ~ /^linux-vdso.so/) {
         next
