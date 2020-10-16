@@ -21,6 +21,7 @@ good_msg()
     msg="${msg:-...}"
 
     echo -e "${GOOD}>>${NORMAL} ${msg} ${NORMAL}"
+    echo -e "<6>>> ${msg}" > /dev/kmsg
 }
 
 bad_msg()
@@ -29,6 +30,7 @@ bad_msg()
     msg="${msg:-...}"
 
     echo -e "${BAD}!!${NORMAL} ${msg} ${NORMAL}"
+    echo -e "<1>>> ${msg}" > /dev/kmsg
 }
 
 runshell()
@@ -67,10 +69,16 @@ udev_start()
 
     # run udevd and let it process uevents
     echo > /sys/kernel/uevent_helper
+    if [ -e /proc/sys/kernel/hotplug ]; then
+        echo "" >/proc/sys/kernel/hotplug
+    fi
     mkdir -p /dev/.udev/db/
     ${udevd_bin} --daemon --resolve-names=never
     mkdir -p /dev/.udev/queue/ /dev/.udev/rules.d/
-    udevadm trigger
+    udevadm trigger --attr-match=dev --action=add
+    udevadm trigger --subsystem-match=net --action=add
+    udevadm trigger --type=subsystems --action=add
+    udevadm trigger --type=devices --action=add
     udevadm settle || true
 
     # if the scandelay parameter has been set, we wait a bit for devices
@@ -93,15 +101,22 @@ rootfs_init()
     [ -d ${NEW_ROOT} ] || mkdir -p ${NEW_ROOT}
 
     if [ -z "${REAL_ROOT}" ] ; then
-        REAL_ROOT="${FAKE_ROOT}" 
+        REAL_ROOT="${FAKE_ROOT}"
     fi
 
-    real_device=$(findfs ${REAL_ROOT})
+    local i=0
+    while [ $i -lt ${TIMEOUT:-60} ] ; do
+        real_device=$(findfs ${REAL_ROOT})
+        if [ -n "${real_device}" ] ; then
+            break
+        fi
+        sleep 1 && i=$(($i + 1))
+    done
     if [ ! -n "${real_device}" ] ; then
-        panic "Can't find root device ${REAL_ROOT}"
+        panic "Can't find root device ${REAL_ROOT}, try ${i} times"
     fi
 
-    good_msg "Detected root: ${real_device}"
+    good_msg "Detected root: ${real_device}, try ${i} times"
     fstype=$(blkid ${real_device} | sed -n 's/.*TYPE=\"\([^\"]*\)\".*/\1/p')
     if [ -z "${fstype}" ] ; then
         panic "Unable to detect the filesystem type"
