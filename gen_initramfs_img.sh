@@ -91,7 +91,7 @@ find_km()
     local m=$1
     local fms=""
 
-    local fm="$(find ${km_directory} -name "${m}.ko")"
+    local fm="$(find ${km_directory} -regex "${km_directory}/\S*/${m}.ko\(.\(gz\|xz\)\)?")"
     if [ -z "${fm}" ] ; then
         grep -E "/${m}.ko$" ${km_directory}/modules.builtin > /dev/null 2>&1
         if [ $? -eq 0 ] ; then
