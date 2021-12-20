@@ -170,6 +170,8 @@ if [ ! -d "${km_directory}" ] ; then
 fi
 good_msg "build initramfs image w/ kernel ${KV}"
 
+PATH_BUSYBOX=$(which busybox)
+
 declare -A km_aliases
 declare -A km_modules
 
@@ -184,7 +186,8 @@ list_dirs=""
 list_devices=""
 list_executables=""
 list_files=""
-list_sdirs="./${KIND}"
+list_sdirs="./${KIND}"  # all files in ${KIND}
+
 source ${PROG_LIST}
 for g in ${!conf_*}; do
     k=${g#conf_}
@@ -220,22 +223,23 @@ for g in ${!conf_*}; do
             list_executables=${list_executables}" $(which $e)"
         done
     elif [ ${k} == "link_to_busybox" ] ; then
-        busybox_path=$(which busybox)
-        list_executables=${list_executables}" ${busybox_path}"
+        [ -z "${PATH_BUSYBOX}" ] && {
+            die 1 "busybox not found, can't continue"
+            continue
+        }
+        list_executables=${list_executables}" ${PATH_BUSYBOX}"
         for s in ${!g}; do
             fe=$(which $s)
-            if [ "${fe%/*}" == "${busybox_path%/*}" ] ; then
+            if [ "${fe%/*}" == "${PATH_BUSYBOX%/*}" ] ; then
                 fb=busybox
             else
-                fb=${busybox_path}
+                fb=${PATH_BUSYBOX}
             fi
             list_confs=${list_confs}"slink ${fe} ${fb} 0777 0 0\n"
         done
     fi
 done
-list_items=${list_items}"${list_confs}\n"
 
-list_confs=""
 for d in ${list_sdirs}; do
     if [ -d "${d}" ] ; then
         for f in $(find ${d}); do
@@ -263,39 +267,19 @@ for d in ${list_sdirs}; do
         die 1 "directory ${d} not found"
     fi
 done
-list_items=${list_items}"${list_confs}"
 
 list_iters="$(iter_files $(echo "${list_files}" "${list_devices}" "${list_executables}" | sed 's/ /\n/g' | sort | uniq))"
 
 good_msg "Collect udev files ..."
-
 udevd_bin="/sbin/udevd"
-[ ! -e "${udevd_bin}" ] && udevd_bin="/usr/lib/systemd/systemd-udevd"
 [ ! -e "${udevd_bin}" ] && udevd_bin="/lib/systemd/systemd-udevd"
+[ ! -e "${udevd_bin}" ] && udevd_bin="/usr/lib/systemd/systemd-udevd"
+[ ! -e "${udevd_bin}" ] && {
+    die 1 "udevd programs not found, abort"
+}
+list_udevd="file /sbin/udevd ${udevd_bin} 0755 0 0\n"
 
-list_udev=${list_udev}"file /sbin/udevd ${udevd_bin} 0755 0 0\n"
-list_udevs=""
-for u in ata_id scsi_id; do
-    list_udevs=${list_udevs}"/lib/udev/${u}\n"
-done
-for u in 10-dm.rules \
-         11-dm-lvm.rules \
-         13-dm-disk.rules \
-         40-gentoo.rules \
-         50-udev-default.rules \
-         60-cdrom_id.rules \
-         60-input-id.rules \
-         60-persistent-storage.rules \
-         63-md-raid-arrays.rules \
-         64-md-raid-assembly.rules \
-         69-dm-lvm-metad.rules \
-         80-drivers.rules \
-         95-dm-notify.rules ; do
-    list_udevs=${list_udevs}"/lib/udev/rules.d/${u}\n"
-done
-list_udevs="$(iter_files $(echo -e "${list_udevs}" | sort | uniq))"
-
-list_items=${list_items}${list_iters}"\n"${list_udev}"\n"${list_udevs}"\n"
+list_items=${list_items}${list_confs}${list_iters}"\n"${list_udevd}"\n"
 
 AWK_EXEC='{
     if ($1 == "#") {
