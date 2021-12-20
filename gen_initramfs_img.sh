@@ -356,6 +356,8 @@ for g in ${!kernel_modules_*}; do
         fms=$(find_km ${m})
         if [ ! -z "${fms}" ] ; then
             file_modules=${file_modules}"${fms}\n"
+        else
+            bad_msg " ${m} not found"
         fi
     done
 done
