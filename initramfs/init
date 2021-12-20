@@ -82,8 +82,8 @@ udev_start()
     udevadm settle || true
 
     # if the scandelay parameter has been set, we wait a bit for devices
-    sleep 3 # sleep 3 seconds anyway: most USB devices just need it to initialize
-    [ -n "${SCANDELAY}" ] && good_msg "Waiting ${SCANDELAY} seconds ..." && sleep ${SCANDELAY}
+    #sleep 3 # sleep 3 seconds anyway: most USB devices just need it to initialize
+    #[ -n "${SCANDELAY}" ] && good_msg "Waiting ${SCANDELAY} seconds ..." && sleep ${SCANDELAY}
 }
 
 udev_stop()
@@ -113,10 +113,10 @@ rootfs_init()
         sleep 1 && i=$(($i + 1))
     done
     if [ ! -n "${real_device}" ] ; then
-        panic "Can't find root device ${REAL_ROOT}, try ${i} times"
+        panic "Can't find root device ${REAL_ROOT}, ${i} times tried"
     fi
 
-    good_msg "Detected root: ${real_device}, try ${i} times"
+    good_msg "Detected root: ${real_device}, ${i} time(s) tried"
     fstype=$(blkid ${real_device} | sed -n 's/.*TYPE=\"\([^\"]*\)\".*/\1/p')
     if [ -z "${fstype}" ] ; then
         panic "Unable to detect the filesystem type"
