@@ -370,7 +370,7 @@ file_modules=""
 for g in ${!kernel_modules_*}; do
     for m in ${!g}; do
         fms=$(find_km ${m})
-        if [ ! -z ${fms} ] ; then
+        if [ ! -z "${fms}" ] ; then
             file_modules=${file_modules}"${fms}\n"
         fi
     done
