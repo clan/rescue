@@ -88,11 +88,28 @@ udev_start()
 
 udev_stop()
 {
-    good_msg "Try stop udev ..."
+    good_msg "Stop udev ..."
     # Stop udevd, we'll miss a few events while we run init, but we catch up
     for proc in /proc/[0-9]* ; do
         [ -x $proc/exe ] || continue
         [ "$(readlink $proc/exe)" != ${udevd_bin} ] || kill ${proc#/proc/}
+    done
+}
+
+lvm_start()
+{
+    good_msg "Activating LVM ..."
+    lvm vgchange --quiet --sysinit --activate y
+}
+
+lvm_stop()
+{
+    # lvm vgchange --quiet --sysinit --activate n
+    good_msg "Deactivate unused LVs ..."
+    for lv in $(lvm lvs -o lv_path --noheadings --nosuffix --rows 2>/dev/null); do
+        findmnt "${lv}" > /dev/null && continue
+        echo "  ${lv}"
+        lvm lvchange --quiet --sysinit --activate n ${lv}
     done
 }
 
@@ -184,9 +201,11 @@ for x in $(cat /proc/cmdline); do
 done
 
 udev_start
+lvm_start
 
 rootfs_init
 
+lvm_stop
 udev_stop
 
 move_mounts_to_chroot
